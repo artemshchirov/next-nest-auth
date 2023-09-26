@@ -214,10 +214,46 @@ Finally, let's integrate Next Auth into our Next.js app.
    import { Adapter } from 'next-auth/adapters';
    import NextAuth from 'next-auth/next';
    import GoogleProvider from 'next-auth/providers/google';
-
    const handler = NextAuth({
-     // ... your NextAuth configuration
+     providers: [
+       GoogleProvider({
+         clientId: process.env.GOOGLE_CLIENT_ID,
+         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+         authorization: {
+           params: {
+             prompt: 'consent',
+             access_type: 'offline',
+             response_type: 'code',
+           },
+         },
+       }),
+     ],
+     session: {
+       strategy: 'jwt',
+     },
+     adapter: SupabaseAdapter({
+       url: process.env.NEXT_PUBLIC_SUPABASE_URL,
+       secret: process.env.SUPABASE_SERVICE_ROLE_KEY,
+     }) as Adapter,
+     callbacks: {
+       async jwt({ token, account }) {
+         if (account) {
+           token.auth_token = await signJwt({
+             sub: token.sub,
+             id_token: account.id_token,
+             access_token: account.access_token,
+             expires_at: account.expires_at,
+           });
+         }
+         return token;
+       },
+       async session({ session, token }) {
+         session.auth_token = token.auth_token as string;
+         return session;
+       },
+     },
    });
+   export { handler as GET, handler as POST };
    ```
 
    ```bash
@@ -227,14 +263,42 @@ Finally, let's integrate Next Auth into our Next.js app.
 2. Callbacks are crucial for managing sessions and custom JWTs.
 
    ```typescript
-   //... more code on how to handle JWT and session
+    callbacks: {
+       async jwt({ token, account }) {
+         if (account) {
+           token.auth_token = await signJwt({
+             sub: token.sub,
+             id_token: account.id_token,
+             access_token: account.access_token,
+             expires_at: account.expires_at,
+           });
+         }
+         return token;
+       },
+       async session({ session, token }) {
+         session.auth_token = token.auth_token as string;
+         return session;
+       },
+     },
    ```
 
 3. For JWT handling, create a separate folder called `jwt` inside the `_lib` folder.
 
    ```typescript
    import jwt from 'jsonwebtoken';
-   //... JWT handling functions
+   export const signJwt = async (payload: any, expiresIn = '1d') => {
+     const token = await jwt.sign(payload, process.env.APP_JWT_SECRET, {
+       algorithm: 'HS512',
+       expiresIn,
+     });
+     return token;
+   };
+   export const verifyJwt = (token: string) => {
+     const data = jwt.verify(token, process.env.APP_JWT_SECRET, {
+       algorithms: ['HS512'],
+     });
+     return data;
+   };
    ```
 
 4. Finally, create a `types/next-auth.d.ts` file.
