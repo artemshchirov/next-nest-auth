@@ -5,6 +5,7 @@ import React from 'react';
 
 const SignoutButton = () => {
   const { data: session } = useSession();
+  console.log('Session data', session);
   if (session?.user) {
     return (
       <div className='flex gap-4 ml-auto'>
